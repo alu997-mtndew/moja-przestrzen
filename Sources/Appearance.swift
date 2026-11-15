@@ -5,7 +5,7 @@ enum SpacePalette {
     static let background = adaptive(0xF7F4EF, 0x1B2123)
     static let surface = adaptive(0xFFFDF9, 0x242C2F)
     static let ink = adaptive(0x353D42, 0xF1EEE7)
-    static let muted = adaptive(0x545F64, 0xBAC4C3)
+    static let muted = adaptive(0x465054, 0xBAC4C3)
     static let border = adaptive(0xE5DED4, 0x3B4749)
     static let sage = adaptive(0xB6C7B0, 0x35473C)
     static let lavender = adaptive(0xDAD1E9, 0x453D55)
