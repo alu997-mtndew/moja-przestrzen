@@ -355,7 +355,7 @@ struct HomeView: View {
                     let start = value.startLocation
                     if abs(start.x - size.width / 2) < size.width * 0.30,
                        abs(start.y - size.height / 2) < size.height * 0.24,
-                       y < -max(48, abs(x)) {
+                       y > max(48, abs(x)) {
                         go(to: .daily)
                     }
                 } else if abs(x) > abs(y) * 1.2 {
