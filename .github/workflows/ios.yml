@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,18 +17,38 @@ jobs:
     timeout-minutes: 20
     outputs:
       version: ${{ steps.version.outputs.value }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Wersja paczki
         id: version
         shell: bash
+        env:
+          PREVIOUS_SHA: ${{ github.event.before }}
         run: |
-          version=0.1.0
+          project=MojaPrzestrzen.xcodeproj/project.pbxproj
+          project_version() {
+            sed -nE 's/.*MARKETING_VERSION = ([0-9]+\.[0-9]+\.[0-9]+);.*/\1/p' | sort -u
+          }
+          version=$(project_version < "$project")
+          release_tag=''
           if [[ "$GITHUB_REF_TYPE" == tag ]]; then
             [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
             version=${GITHUB_REF_NAME#v}
+            release_tag=$GITHUB_REF_NAME
+          elif [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+            if git cat-file -e "$PREVIOUS_SHA:$project" 2>/dev/null; then
+              previous_version=$(git show "$PREVIOUS_SHA:$project" | project_version)
+              if [[ "$previous_version" != "$version" ]]; then
+                release_tag="v$version"
+              fi
+            fi
           fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
       - name: Sprawdź archiwum i kopie zapasowe
         run: bash Scripts/check-storage.sh
       - name: Zbuduj niepodpisaną IPA dla iPhone’a
@@ -40,8 +62,8 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: github.ref_type == 'tag'
     needs: build
+    if: needs.build.outputs.release_tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -53,6 +75,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "MojaPrzestrzen-$VERSION.ipa" \
-            --repo "$GITHUB_REPOSITORY" --verify-tag --title "Moja przestrzeń $VERSION" --generate-notes
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Wydanie $RELEASE_TAG już istnieje."
+            exit 0
+          fi
+          options=(--target "$GITHUB_SHA")
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            options=(--verify-tag)
+          else
+            existing=$(gh api --paginate "repos/$GITHUB_REPOSITORY/tags" |
+              jq -r --arg tag "$RELEASE_TAG" '.[] | select(.name == $tag) | .commit.sha')
+            [[ -z "$existing" || "$existing" == "$GITHUB_SHA" ]]
+          fi
+          gh release create "$RELEASE_TAG" "MojaPrzestrzen-$VERSION.ipa" \
+            --repo "$GITHUB_REPOSITORY" "${options[@]}" --title "Moja przestrzeń $VERSION" --generate-notes

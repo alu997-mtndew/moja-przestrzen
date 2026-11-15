@@ -38,6 +38,7 @@ struct EditorDraft: Identifiable {
 
 struct EntryEditor: View {
     @State var draft: EditorDraft
+    let accent: Color
     let save: (EditorDraft) -> Bool
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focus: Field?
@@ -53,38 +54,53 @@ struct EntryEditor: View {
                     TextField("Treść", text: $draft.text, axis: .vertical)
                         .lineLimit(4...12)
                         .focused($focus, equals: .body)
+                        .spaceCard(fill: SpacePalette.surface)
+                        .spaceListRow()
                     switch draft.subject {
                     case .duty(let period, _):
                         Picker("Sekcja", selection: $draft.taskKind) {
                             ForEach(TaskKind.allCases) { Text($0.label(period)).tag($0) }
-                        }.pickerStyle(.segmented)
+                        }.pickerStyle(.segmented).spaceCard(fill: accent).spaceListRow()
                     case .note(.idea):
                         Picker("Priorytet", selection: $draft.priority) {
                             ForEach(Priority.allCases) { Text($0.rawValue).tag($0) }
-                        }.pickerStyle(.segmented)
+                        }.pickerStyle(.segmented).spaceCard(fill: accent).spaceListRow()
                     default:
                         EmptyView()
                     }
                 }
                 if case .note(.behavior) = draft.subject, draft.entryID != nil {
-                    Section("Refleksje") {
+                    Section {
                         ForEach(draft.reflections) { reflection in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(reflection.text)
                                 Text(Period.dateLabel(reflection.createdAt, format: "d MMM yyyy, HH:mm"))
-                                    .font(.caption).foregroundStyle(.secondary)
+                                    .font(.caption).foregroundStyle(SpacePalette.muted)
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .spaceCard()
+                            .spaceListRow()
                         }
                         TextField("Dopisz refleksję", text: $reflectionText, axis: .vertical)
                             .focused($focus, equals: .reflection)
+                            .spaceCard()
+                            .spaceListRow()
+                    } header: {
+                        Text("Refleksje").spaceSectionTitle()
                     }
                 }
             }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .background(SpacePalette.background)
+            .foregroundStyle(SpacePalette.ink)
             .navigationTitle(draft.title)
+            .toolbarBackground(SpacePalette.background, for: .navigationBar)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Anuluj") { dismiss() }
+                        .font(.subheadline.weight(.medium))
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Zapisz") {
@@ -93,10 +109,13 @@ struct EntryEditor: View {
                             next.reflections.append(Reflection(text: cleanedReflection, createdAt: Date()))
                         }
                         if save(next) { dismiss() }
-                    }.disabled(draft.cleanedText.isEmpty)
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .disabled(draft.cleanedText.isEmpty)
                 }
             }
             .task { if draft.entryID == nil { focus = .body } }
         }
+        .tint(SpacePalette.accent)
     }
 }

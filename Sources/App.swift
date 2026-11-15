@@ -15,7 +15,8 @@ struct HomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var expanded = false
-    @State private var dragX: CGFloat = 0
+    @GestureState(resetTransaction: Transaction(animation: .spring(response: 0.40, dampingFraction: 0.90)))
+    private var dragX: CGFloat = 0
     @State private var now = Date()
     @State private var editor: EditorDraft?
     @State private var pendingDelete: Deletion?
@@ -41,19 +42,31 @@ struct HomeView: View {
         default: nil
         }
     }
-    private var animation: Animation? { reduceMotion ? nil : .easeOut(duration: 0.24) }
+    private var pageAnimation: Animation? {
+        reduceMotion ? nil : .spring(response: 0.40, dampingFraction: 0.90)
+    }
+
+    private var entryAnimation: Animation? { reduceMotion ? nil : .easeInOut(duration: 0.32) }
+
+    private var panelTransition: AnyTransition {
+        reduceMotion ? .identity : .offset(y: 16).combined(with: .opacity)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             if expanded {
-                detailsHeader
-                details
+                VStack(spacing: 0) {
+                    detailsHeader
+                    details
+                }
+                .transition(panelTransition)
             } else {
-                overview
+                overview.transition(reduceMotion ? .identity : .opacity)
             }
             if segment != .title { navigation }
         }
-        .background(Color(uiColor: .systemBackground))
+        .background(SpacePalette.background.ignoresSafeArea())
+        .tint(SpacePalette.accent)
         .onAppear { now = Date() }
         .onChange(of: scenePhase) { phase in
             if phase == .active { now = Date() }
@@ -70,7 +83,7 @@ struct HomeView: View {
             }
         }
         .sheet(item: $editor) { draft in
-            EntryEditor(draft: draft, save: save)
+            EntryEditor(draft: draft, accent: SpacePalette.tint(for: segment), save: save)
         }
         .confirmationDialog("Usunąć ten wpis?", isPresented: showingDelete, titleVisibility: .visible) {
             Button("Usuń", role: .destructive) {
@@ -111,52 +124,73 @@ struct HomeView: View {
     }
 
     private var overview: some View {
-        GeometryReader { geo in
+        GeometryReader { geometry in
+            let width = geometry.size.width
             ZStack {
-                Color.clear
-                if segment == .title {
-                    heading(.title)
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityAction { go(to: .daily) }
-                        .onTapGesture { go(to: .daily) }
-                } else {
-                    ForEach(Segment.allCases) { page in
-                        let distance = page.rawValue - lastSegment
-                        if abs(distance) <= 1 {
-                            heading(page)
-                                .frame(width: geo.size.width, height: geo.size.height)
-                                .offset(x: CGFloat(distance) * geo.size.width + dragX)
-                                .accessibilityHidden(distance != 0)
-                                .allowsHitTesting(distance == 0)
-                        }
-                    }
+                ForEach(Segment.allCases) { page in
+                    let distance = CGFloat(page.rawValue - segment.rawValue)
+                    let offset = reduceMotion ? 0 : distance * width + dragX
+                    let visibility = max(0, 1 - abs((offset / max(1, width))) * 0.75)
+                    heading(page)
+                        .frame(width: width, height: geometry.size.height)
+                        .offset(x: offset)
+                        .opacity(reduceMotion ? (distance == 0 ? 1 : 0) : visibility)
+                        .accessibilityHidden(distance != 0)
+                        .allowsHitTesting(distance == 0)
                 }
             }
-            .frame(width: geo.size.width, height: geo.size.height)
+            .frame(width: width, height: geometry.size.height)
             .contentShape(Rectangle())
             .clipped()
-            .gesture(pageGesture(size: geo.size, expanded: false))
+            .gesture(pageGesture(size: geometry.size, expanded: false))
         }
     }
 
-    private func heading(_ page: Segment) -> some View {
-        VStack(spacing: 12) {
-            Text(page.name)
-                .font(.largeTitle.weight(.medium))
-                .accessibilityAddTraits(.isHeader)
-            if page == .daily || page == .weekly {
-                Text((page == .daily ? Period.daily : .weekly).label(now))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+    @ViewBuilder private func heading(_ page: Segment) -> some View {
+        if page == .title {
+            Button { go(to: .daily) } label: {
+                Text(page.name)
+                    .font(.system(.largeTitle, design: .serif).weight(.semibold))
+                    .foregroundStyle(SpacePalette.ink)
+                    .multilineTextAlignment(.center)
+                    .padding(24)
             }
+            .buttonStyle(.plain)
+            .accessibilityHint("Otwiera segment Codzienne")
+        } else {
+            VStack(spacing: 12) {
+                Text(page.name)
+                    .font(.system(.largeTitle, design: .serif).weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+                    .foregroundStyle(SpacePalette.ink)
+                if page == .daily || page == .weekly {
+                    Text((page == .daily ? Period.daily : .weekly).label(now))
+                        .font(.subheadline)
+                        .foregroundStyle(SpacePalette.muted)
+                }
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 38)
+            .frame(maxWidth: 360)
+            .background(SpacePalette.tint(for: page), in: RoundedRectangle(cornerRadius: 32))
+            .padding(.horizontal, 24)
         }
-        .multilineTextAlignment(.center)
-        .padding(.horizontal, 24)
     }
 
     private var detailsHeader: some View {
         HStack(alignment: .center, spacing: 12) {
-            Text(segment.name).font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(segment.name)
+                    .font(.system(.title2, design: .serif).weight(.semibold))
+                    .foregroundStyle(SpacePalette.ink)
+                    .accessibilityAddTraits(.isHeader)
+                if let period {
+                    Text(period.label(now)).font(.footnote).foregroundStyle(SpacePalette.muted)
+                }
+            }
+            .id(segment)
+            .transition(reduceMotion ? .identity : .opacity)
             Spacer(minLength: 0)
             if segment != .archive {
                 Button {
@@ -164,14 +198,17 @@ struct HomeView: View {
                     if let period { editor = .newDuty(period) }
                     if let noteKind { editor = .newNote(noteKind, title: segment.name) }
                 } label: {
-                    Image(systemName: "plus").frame(minWidth: 44, minHeight: 44)
+                    Image(systemName: "plus")
+                        .font(.body.weight(.semibold))
+                        .frame(minWidth: 44, minHeight: 44)
                 }
+                .buttonStyle(SpaceButtonStyle(fill: SpacePalette.tint(for: segment)))
                 .accessibilityLabel("Dodaj wpis")
                 .disabled(!data.isAvailable)
             }
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 8)
+        .padding(.vertical, 14)
         .contentShape(Rectangle())
         .gesture(pageGesture(size: .zero, expanded: true))
     }
@@ -180,94 +217,140 @@ struct HomeView: View {
         if let period {
             List {
                 ForEach(TaskKind.allCases) { kind in
-                    Section(kind.label(period)) {
+                    Section {
                         let tasks = data.store.tasks(period, kind, at: now)
-                        if tasks.isEmpty { Text("Brak wpisów").foregroundStyle(.secondary) }
+                        if tasks.isEmpty { EmptyCard(title: "Brak zadań") }
                         ForEach(tasks.map { $0.0 }) { duty in
                             if let entry = duty.revision(at: period.start(now)) {
                                 row(entry.text, edit: { editor = .editDuty(duty, entry, now: now) },
                                     delete: .duty(duty.id, period.start(now)))
                             }
                         }
+                    } header: {
+                        Text(kind.label(period)).spaceSectionTitle()
                     }
                 }
-            }.listStyle(.insetGrouped)
+            }
+            .spaceList()
+            .id(period)
+            .transition(reduceMotion ? .identity : .opacity)
         } else if let noteKind {
             let notes = data.store.notes(of: noteKind)
             List {
-                if notes.isEmpty { Text("Brak wpisów").foregroundStyle(.secondary) }
+                if notes.isEmpty {
+                    EmptyCard(title: "Brak wpisów", detail: "Stuknij +, aby dodać pierwszy wpis.")
+                }
                 ForEach(notes) { note in
-                    let index = notes.firstIndex { $0.id == note.id } ?? 0
-                    let text = noteKind == .commandment ? "\(index + 1). \(note.text)" : note.text
+                    let index = noteKind == .commandment ? notes.firstIndex { $0.id == note.id } : nil
                     let date = Period.dateLabel(note.createdAt, format: "d MMM yyyy, HH:mm")
-                    row(text, subtitle: [note.priority?.rawValue, noteKind == .commandment ? nil : date]
-                        .compactMap { $0 }.joined(separator: " · "),
+                    row(note.text, number: index.map { $0 + 1 },
+                        subtitle: noteKind == .commandment ? nil : date,
+                        priority: note.priority,
                         edit: { editor = .editNote(note, title: segment.name) }, delete: .note(note.id))
                 }
-            }.listStyle(.insetGrouped)
+            }
+            .spaceList()
+            .id(noteKind)
+            .transition(reduceMotion ? .identity : .opacity)
         } else {
             ArchiveView(store: data.store, now: now, export: exportBackup, restore: { importing = true })
-                .id(segment)
+                .transition(reduceMotion ? .identity : .opacity)
         }
     }
 
-    private func row(_ text: String, subtitle: String = "", edit: @escaping () -> Void, delete: Deletion) -> some View {
+    private func row(
+        _ text: String, number: Int? = nil, subtitle: String? = nil, priority: Priority? = nil,
+        edit: @escaping () -> Void, delete: Deletion
+    ) -> some View {
         Button(action: edit) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(text).foregroundStyle(.primary).multilineTextAlignment(.leading)
-                if !subtitle.isEmpty { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                if let number {
+                    Text("\(number).").font(.subheadline.weight(.semibold)).foregroundStyle(SpacePalette.muted)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(text)
+                        .font(.body)
+                        .foregroundStyle(SpacePalette.ink)
+                        .multilineTextAlignment(.leading)
+                        .id(text)
+                        .transition(reduceMotion ? .identity : .opacity)
+                    if let priority {
+                        Text(priority.rawValue)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(SpacePalette.ink)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(priorityTint(priority), in: Capsule())
+                            .accessibilityLabel("Priorytet: \(priority.rawValue)")
+                    }
+                    if let subtitle {
+                        Text(subtitle).font(.caption).foregroundStyle(SpacePalette.muted)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+            .spaceCard()
+            .contentShape(RoundedRectangle(cornerRadius: 20))
         }
         .buttonStyle(.plain)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button { pendingDelete = delete } label: { Label("Usuń", systemImage: "trash") }
-                .tint(.red)
+                .tint(SpacePalette.destructive)
         }
         .accessibilityAction(named: Text("Usuń")) { pendingDelete = delete }
         .contextMenu { Button("Usuń", role: .destructive) { pendingDelete = delete } }
+        .spaceListRow()
+    }
+
+    private func priorityTint(_ priority: Priority) -> Color {
+        switch priority {
+        case .low: SpacePalette.sage
+        case .medium: SpacePalette.lavender
+        case .high: SpacePalette.peach
+        }
     }
 
     private var navigation: some View {
-        HStack {
+        HStack(spacing: 8) {
             navButton("chevron.left", "Poprzedni segment") { move(-1) }
-            Spacer()
+            Spacer(minLength: 0)
             Button { setExpanded(!expanded) } label: {
                 Label(expanded ? "Zwiń" : "Otwórz", systemImage: expanded ? "chevron.up" : "chevron.down")
-                    .font(.subheadline)
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 14)
                     .frame(minHeight: 44)
             }
-            Spacer()
+            .buttonStyle(SpaceButtonStyle(fill: SpacePalette.tint(for: segment)))
+            Spacer(minLength: 0)
             navButton("chevron.right", "Następny segment") { move(1) }
                 .disabled(segment == .archive)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
         .contentShape(Rectangle())
         .gesture(pageGesture(size: .zero, expanded: expanded))
     }
 
     private func navButton(_ icon: String, _ name: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { Image(systemName: icon).frame(width: 44, height: 44) }
+            .buttonStyle(SpaceButtonStyle())
             .accessibilityLabel(name)
     }
 
     private func pageGesture(size: CGSize, expanded isExpanded: Bool) -> some Gesture {
         DragGesture(minimumDistance: 18)
-            .onChanged { value in
+            .updating($dragX) { value, offset, transaction in
                 let x = value.translation.width
                 let y = value.translation.height
-                guard !isExpanded, segment != .title, !reduceMotion, abs(x) > abs(y) else {
-                    dragX = 0
-                    return
-                }
-                dragX = min(size.width, max(-size.width, x))
-                if segment == .archive, x < 0 { dragX *= 0.2 }
+                guard size.width > 0, !isExpanded, segment != .title, !reduceMotion,
+                      abs(x) > abs(y) else { return }
+                transaction.animation = nil
+                let atEnd = segment == .archive && x < 0
+                offset = min(size.width, max(-size.width, x)) * (atEnd ? 0.18 : 1)
             }
             .onEnded { value in
                 let x = value.translation.width
                 let y = value.translation.height
-                withAnimation(animation) { dragX = 0 }
                 if segment == .title {
                     let start = value.startLocation
                     if abs(start.x - size.width / 2) < size.width * 0.30,
@@ -275,8 +358,11 @@ struct HomeView: View {
                        y > max(48, abs(x)) {
                         go(to: .daily)
                     }
-                } else if abs(x) > max(42, abs(y) * 1.2) {
-                    move(x < 0 ? 1 : -1)
+                } else if abs(x) > abs(y) * 1.2 {
+                    let projected = value.predictedEndTranslation.width
+                    if abs(x) > 48 || (abs(x) > 26 && abs(projected) > 105) {
+                        move(x < 0 ? 1 : -1)
+                    }
                 } else if isExpanded, y < -45, abs(y) > abs(x) {
                     setExpanded(false)
                 } else if !isExpanded, y > 45, abs(y) > abs(x) {
@@ -291,16 +377,15 @@ struct HomeView: View {
 
     private func go(to destination: Segment) {
         now = Date()
-        withAnimation(animation) {
+        withAnimation(pageAnimation) {
             lastSegment = destination.rawValue
-            dragX = 0
             expanded = expanded && destination != .title
         }
     }
 
     private func setExpanded(_ value: Bool) {
         now = Date()
-        withAnimation(animation) { expanded = value }
+        withAnimation(pageAnimation) { expanded = value }
     }
 
     private func save(_ draft: EditorDraft) -> Bool {
@@ -311,18 +396,22 @@ struct HomeView: View {
                 data.errorMessage = "Ten okres się skończył. Otwórz ponownie aktualną listę, aby zmienić zadanie."
                 return false
             }
-            return data.update { $0.saveDuty(id: draft.entryID, period: period, kind: draft.taskKind, text: draft.cleanedText, now: now) }
+            return withAnimation(entryAnimation) {
+                data.update { $0.saveDuty(id: draft.entryID, period: period, kind: draft.taskKind, text: draft.cleanedText, now: now) }
+            }
         case .note(let kind):
             let time = now
-            return data.update { store in
-                let priority = kind == .idea ? draft.priority : nil
-                if let index = store.notes.firstIndex(where: { $0.id == draft.entryID }) {
-                    store.notes[index].text = draft.cleanedText
-                    store.notes[index].updatedAt = max(time, store.notes[index].createdAt)
-                    store.notes[index].priority = priority
-                    store.notes[index].reflections = draft.reflections.isEmpty ? nil : draft.reflections
-                } else {
-                    store.notes.append(Note(kind: kind, text: draft.cleanedText, createdAt: time, updatedAt: time, priority: priority))
+            return withAnimation(entryAnimation) {
+                data.update { store in
+                    let priority = kind == .idea ? draft.priority : nil
+                    if let index = store.notes.firstIndex(where: { $0.id == draft.entryID }) {
+                        store.notes[index].text = draft.cleanedText
+                        store.notes[index].updatedAt = max(time, store.notes[index].createdAt)
+                        store.notes[index].priority = priority
+                        store.notes[index].reflections = draft.reflections.isEmpty ? nil : draft.reflections
+                    } else {
+                        store.notes.append(Note(kind: kind, text: draft.cleanedText, createdAt: time, updatedAt: time, priority: priority))
+                    }
                 }
             }
         }
@@ -330,11 +419,13 @@ struct HomeView: View {
 
     private func delete(_ action: Deletion) {
         now = Date()
-        switch action {
-        case .duty(let id, let originalStart):
-            guard let period, period.start(now) == originalStart else { return }
-            data.update { $0.removeDuty(id, effective: originalStart) }
-        case .note(let id): data.update { $0.notes.removeAll { $0.id == id } }
+        withAnimation(entryAnimation) {
+            switch action {
+            case .duty(let id, let originalStart):
+                guard let period, period.start(now) == originalStart else { return }
+                data.update { $0.removeDuty(id, effective: originalStart) }
+            case .note(let id): data.update { $0.notes.removeAll { $0.id == id } }
+            }
         }
     }
 
