@@ -17,7 +17,7 @@ git push --atomic -u origin main v0.1.0
 
 GitHub Actions buduje aplikację w trybie Release na `macos-15` dla fizycznych urządzeń ARM64. Po wypchnięciu taga `vMAJOR.MINOR.PATCH` udana kompilacja automatycznie tworzy wydanie w **Releases** i załącza niepodpisany plik `MojaPrzestrzen-MAJOR.MINOR.PATCH.ipa`. Wypychanie kodu na `main` lub ręczne uruchomienie workflow pozwala pobrać paczkę również w **Actions → iOS IPA → Artifacts → MojaPrzestrzen-IPA**. Z artefaktu Actions trzeba najpierw wypakować plik `.ipa`.
 
-Kolejne wydanie powstaje po wypchnięciu nowego taga, na przykład `git tag v0.1.1` i `git push origin v0.1.1`. Tag powinien wskazywać commit zawierający workflow. Prywatne repozytorium korzysta z limitu GitHub Actions przypisanego do konta. Kompilacja nie wymaga sekretów Apple ani Maca użytkownika.
+Kolejne wydanie powstaje po zmianie `MARKETING_VERSION` w projekcie Xcode i scaleniu jej z `main` albo po wypchnięciu nowego taga `vMAJOR.MINOR.PATCH`. Tag powinien wskazywać commit zawierający workflow. Pull request uruchamia kompilację testową i udostępnia IPA jako artefakt. Prywatne repozytorium korzysta z limitu GitHub Actions przypisanego do konta. Kompilacja nie wymaga sekretów Apple ani Maca użytkownika.
 
 ## SideStore i aktualizacje
 

@@ -13,50 +13,90 @@ struct ArchiveView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Historia") {
+                Section {
                     ForEach(Period.allCases) { period in
-                        NavigationLink(period.archiveLabel, value: Page.years(period))
+                        archiveLink(period.archiveLabel, to: .years(period))
                     }
+                } header: {
+                    Text("Historia").spaceSectionTitle()
                 }
-                Section("Kopia zapasowa") {
-                    Button("Eksportuj kopię JSON", action: export)
-                    Button("Odtwórz kopię z Plików", action: restore)
+                Section {
+                    archiveButton("Eksportuj kopię JSON", icon: "square.and.arrow.up", action: export)
+                    archiveButton("Odtwórz kopię z Plików", icon: "square.and.arrow.down", action: restore)
+                } header: {
+                    Text("Kopia zapasowa").spaceSectionTitle()
                 }
             }
+            .spaceList()
             .navigationDestination(for: Page.self) { page in
                 switch page {
                 case .years(let period):
                     List(years(period), id: \.self) { year in
-                        NavigationLink(String(year), value: Page.year(period, year))
-                    }.navigationTitle(period.archiveLabel)
+                        archiveLink(String(year), to: .year(period, year))
+                    }.spaceList().navigationTitle(period.archiveLabel)
                 case .year(.daily, let year):
                     List(months(year), id: \.self) { month in
-                        NavigationLink(Period.dateLabel(date(year, month), format: "LLLL").capitalized,
-                                       value: Page.month(year, month))
-                    }.navigationTitle(String(year))
+                        archiveLink(Period.dateLabel(date(year, month), format: "LLLL").capitalized,
+                                    to: .month(year, month))
+                    }.spaceList().navigationTitle(String(year))
                 case .year(.weekly, let year):
                     List(weeks(year), id: \.self) { week in
-                        NavigationLink(Period.weekly.label(week), value: Page.entries(.weekly, week))
-                    }.navigationTitle(String(year))
+                        archiveLink(Period.weekly.label(week), to: .entries(.weekly, week))
+                    }.spaceList().navigationTitle(String(year))
                 case .month(let year, let month):
                     List(days(year, month), id: \.self) { day in
-                        NavigationLink(Period.daily.label(day), value: Page.entries(.daily, day))
-                    }.navigationTitle(Period.dateLabel(date(year, month), format: "LLLL yyyy").capitalized)
+                        archiveLink(Period.daily.label(day), to: .entries(.daily, day))
+                    }.spaceList().navigationTitle(Period.dateLabel(date(year, month), format: "LLLL yyyy").capitalized)
                 case .entries(let period, let day):
                     List {
                         ForEach(TaskKind.allCases) { kind in
-                            Section(kind.label(period)) {
+                            Section {
                                 let tasks = store.tasks(period, kind, at: day)
-                                if tasks.isEmpty { Text("Brak wpisów").foregroundStyle(.secondary) }
-                                ForEach(tasks.map { $0.1 }) { entry in Text(entry.text) }
+                                if tasks.isEmpty { EmptyCard(title: "Brak wpisów") }
+                                ForEach(tasks.map { $0.1 }) { entry in
+                                    Text(entry.text)
+                                        .foregroundStyle(SpacePalette.ink)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .spaceCard()
+                                        .spaceListRow()
+                                }
+                            } header: {
+                                Text(kind.label(period)).spaceSectionTitle()
                             }
                         }
-                    }.navigationTitle(period.label(day))
+                    }.spaceList().navigationTitle(period.label(day))
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(SpacePalette.background, for: .navigationBar)
         }
-        .listStyle(.insetGrouped)
+    }
+
+    private func archiveLink(_ title: String, to page: Page) -> some View {
+        NavigationLink(value: page) {
+            Text(title).foregroundStyle(SpacePalette.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 14)
+                .padding(.leading, 16)
+        }
+        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+        .listRowSeparator(.hidden)
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(SpacePalette.surface)
+                .overlay { RoundedRectangle(cornerRadius: 20).strokeBorder(SpacePalette.border) }
+                .padding(.horizontal, 20)
+        )
+    }
+
+    private func archiveButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+        }
+        .buttonStyle(SpaceButtonStyle(fill: SpacePalette.sage))
+        .spaceListRow()
     }
 
     private func years(_ period: Period) -> [Int] {
