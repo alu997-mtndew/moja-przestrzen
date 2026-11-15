@@ -315,7 +315,7 @@ struct HomeView: View {
             navButton("chevron.left", "Poprzedni segment") { move(-1) }
             Spacer(minLength: 0)
             Button { setExpanded(!expanded) } label: {
-                Label(expanded ? "Zwiń" : "Otwórz", systemImage: expanded ? "chevron.up" : "chevron.down")
+                Label(expanded ? "Zwiń" : "Otwórz", systemImage: expanded ? "chevron.down" : "chevron.up")
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 14)
                     .frame(minHeight: 44)
@@ -355,7 +355,7 @@ struct HomeView: View {
                     let start = value.startLocation
                     if abs(start.x - size.width / 2) < size.width * 0.30,
                        abs(start.y - size.height / 2) < size.height * 0.24,
-                       y > max(48, abs(x)) {
+                       y < -max(48, abs(x)) {
                         go(to: .daily)
                     }
                 } else if abs(x) > abs(y) * 1.2 {
@@ -363,9 +363,9 @@ struct HomeView: View {
                     if abs(x) > 48 || (abs(x) > 26 && abs(projected) > 105) {
                         move(x < 0 ? 1 : -1)
                     }
-                } else if isExpanded, y < -45, abs(y) > abs(x) {
+                } else if isExpanded, y > 45, abs(y) > abs(x) {
                     setExpanded(false)
-                } else if !isExpanded, y > 45, abs(y) > abs(x) {
+                } else if !isExpanded, y < -45, abs(y) > abs(x) {
                     setExpanded(true)
                 }
             }
