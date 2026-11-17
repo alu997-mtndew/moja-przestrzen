@@ -65,7 +65,7 @@ struct HomeView: View {
             }
             if segment != .title { navigation }
         }
-        .background { AmbientBackground() }
+        .background { AmbientBackground(paused: editor != nil || exporting || importing) }
         .tint(SpacePalette.accent)
         .onAppear { now = Date() }
         .onChange(of: scenePhase) { phase in
