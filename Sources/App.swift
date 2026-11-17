@@ -15,7 +15,7 @@ struct HomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var expanded = false
-    @GestureState(resetTransaction: Transaction(animation: .spring(response: 0.40, dampingFraction: 0.90)))
+    @GestureState(resetTransaction: Transaction(animation: .interactiveSpring(response: 0.48, dampingFraction: 0.87)))
     private var dragX: CGFloat = 0
     @State private var now = Date()
     @State private var editor: EditorDraft?
@@ -43,13 +43,13 @@ struct HomeView: View {
         }
     }
     private var pageAnimation: Animation? {
-        reduceMotion ? nil : .spring(response: 0.40, dampingFraction: 0.90)
+        reduceMotion ? nil : .interactiveSpring(response: 0.48, dampingFraction: 0.87)
     }
 
-    private var entryAnimation: Animation? { reduceMotion ? nil : .easeInOut(duration: 0.32) }
+    private var entryAnimation: Animation? { reduceMotion ? nil : .easeInOut(duration: 0.26) }
 
     private var panelTransition: AnyTransition {
-        reduceMotion ? .identity : .offset(y: 16).combined(with: .opacity)
+        reduceMotion ? .identity : .offset(y: 28).combined(with: .opacity)
     }
 
     var body: some View {
@@ -61,11 +61,11 @@ struct HomeView: View {
                 }
                 .transition(panelTransition)
             } else {
-                overview.transition(reduceMotion ? .identity : .opacity)
+                overview.transition(reduceMotion ? .identity : .offset(y: -18).combined(with: .opacity))
             }
             if segment != .title { navigation }
         }
-        .background(SpacePalette.background.ignoresSafeArea())
+        .background { AmbientBackground(paused: editor != nil || exporting || importing) }
         .tint(SpacePalette.accent)
         .onAppear { now = Date() }
         .onChange(of: scenePhase) { phase in
@@ -134,6 +134,7 @@ struct HomeView: View {
                     heading(page)
                         .frame(width: width, height: geometry.size.height)
                         .offset(x: offset)
+                        .scaleEffect(reduceMotion ? 1 : 0.975 + 0.025 * visibility)
                         .opacity(reduceMotion ? (distance == 0 ? 1 : 0) : visibility)
                         .accessibilityHidden(distance != 0)
                         .allowsHitTesting(distance == 0)

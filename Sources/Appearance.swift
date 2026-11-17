@@ -88,7 +88,7 @@ extension View {
         listStyle(.plain)
             .environment(\.defaultMinListHeaderHeight, 44)
             .scrollContentBackground(.hidden)
-            .background(SpacePalette.background)
+            .background(Color.clear)
     }
 
     func spaceSectionTitle() -> some View {
@@ -97,5 +97,61 @@ extension View {
             .textCase(nil)
             .padding(.leading, 4)
             .accessibilityAddTraits(.isHeader)
+    }
+}
+
+
+// Two very slow colour washes add depth without adding visual clutter.
+// Timeline updates are deliberately capped at 15 fps; the rest of the app
+// retains its normal frame rate and this view never intercepts gestures.
+struct AmbientBackground: View {
+    var paused = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+
+    private var shouldAnimate: Bool {
+        !paused && !reduceMotion && !lowPowerMode && scenePhase == .active
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: !shouldAnimate)) { context in
+                let time = shouldAnimate ? context.date.timeIntervalSinceReferenceDate : 0
+                let radius = max(geometry.size.width, geometry.size.height) * 0.70
+
+                ZStack {
+                    SpacePalette.background
+
+                    RadialGradient(
+                        colors: [SpacePalette.lavender.opacity(0.30), .clear],
+                        center: UnitPoint(
+                            x: CGFloat(0.17 + 0.07 * sin(time / 22)),
+                            y: CGFloat(0.18 + 0.05 * cos(time / 29))
+                        ),
+                        startRadius: 0,
+                        endRadius: radius
+                    )
+
+                    RadialGradient(
+                        colors: [SpacePalette.sage.opacity(0.23), .clear],
+                        center: UnitPoint(
+                            x: CGFloat(0.83 + 0.07 * cos(time / 27)),
+                            y: CGFloat(0.85 + 0.06 * sin(time / 24))
+                        ),
+                        startRadius: 0,
+                        endRadius: radius
+                    )
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.powerStateDidChangeNotification)) { _ in
+            lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+        }
     }
 }
